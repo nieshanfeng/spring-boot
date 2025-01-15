@@ -260,12 +260,18 @@ public class SpringApplication {
 	public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
 		this.resourceLoader = resourceLoader;
 		Assert.notNull(primarySources, "PrimarySources must not be null");
+		// 保存启动类信息
 		this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+		// 初始化环境。环境分为三种 非web环境、web环境、reactive环境三种。其判断逻辑就是判断是否存在指定的类，默认是Servlet 环境，我们这也是Servlet
 		this.webApplicationType = WebApplicationType.deduceFromClasspath();
+		// getSpringFactoriesInstances 方法加载了 spring.factories文件。在这里进行了首次加载spring.factoies文件。设置 BootstrapRegistryInitializer
 		this.bootstrapRegistryInitializers = new ArrayList<>(
 				getSpringFactoriesInstances(BootstrapRegistryInitializer.class));
+		// getSpringFactoriesInstances 方法加载了 spring.factories文件。在这里进行了首次加载spring.factoies文件。设置 ApplicationContextInitializer
 		setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+		// 获取监听器，也加载了spring.factories文件
 		setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+		// 设置启动类信息
 		this.mainApplicationClass = deduceMainApplicationClass();
 	}
 
@@ -291,14 +297,21 @@ public class SpringApplication {
 	 * @return a running {@link ApplicationContext}
 	 */
 	public ConfigurableApplicationContext run(String... args) {
+		// 开启关于启动时间的信息监控
 		long startTime = System.nanoTime();
 		DefaultBootstrapContext bootstrapContext = createBootstrapContext();
+		// 准备 ApplicationContext
 		ConfigurableApplicationContext context = null;
+		//java.awt.headless是J2SE的一种模式用于在缺少显示屏、键盘或者鼠标时的系统配置，很多监控工具如jconsole 需要将该值设置为true，系统变量默认为true
 		configureHeadlessProperty();
+		// 1. 获取Spring的监听器类，这里是从 spring.factories 中去获取，默认的是以 org.springframework.boot.SpringApplicationRunListener 为key,获取到的监听器类型为 EventPublishingRunListener。
 		SpringApplicationRunListeners listeners = getRunListeners(args);
+		// 1.1 监听器发送启动事件
 		listeners.starting(bootstrapContext, this.mainApplicationClass);
 		try {
+			// 封装参数
 			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
+			// 2. 构造容器环境。将容器的一些配置内容加载到 environment  中
 			ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments);
 			configureIgnoreBeanInfo(environment);
 			Banner printedBanner = printBanner(environment);
