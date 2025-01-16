@@ -262,22 +262,26 @@ public class SpringApplication {
 		Assert.notNull(primarySources, "PrimarySources must not be null");
 		// 保存启动类信息
 		this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+		//1.获取应用类型
 		// 初始化环境。环境分为三种 非web环境、web环境、reactive环境三种。其判断逻辑就是判断是否存在指定的类，默认是Servlet 环境，我们这也是Servlet
 		this.webApplicationType = WebApplicationType.deduceFromClasspath();
-		// getSpringFactoriesInstances 方法加载了 spring.factories文件。在这里进行了首次加载spring.factoies文件。设置 BootstrapRegistryInitializer
+		//2.获取所有初始化注册类器(getSpringFactoriesInstances 方法加载了 spring.factories文件。在这里进行了首次加载spring.factoies文件。设置 BootstrapRegistryInitializer)
 		this.bootstrapRegistryInitializers = new ArrayList<>(
 				getSpringFactoriesInstances(BootstrapRegistryInitializer.class));
+		//3.获取所有初始化器
 		// getSpringFactoriesInstances 方法加载了 spring.factories文件。在这里进行了首次加载spring.factoies文件。设置 ApplicationContextInitializer
 		setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
-		// 获取监听器，也加载了spring.factories文件
+		//4.获取所有监听器(也加载了spring.factories文件)
 		setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
-		// 设置启动类信息
+		//5.定位main方法(设置启动类信息)
 		this.mainApplicationClass = deduceMainApplicationClass();
 	}
 
 	private Class<?> deduceMainApplicationClass() {
 		try {
+			//通过创建运行时异常的方式获取栈
 			StackTraceElement[] stackTrace = new RuntimeException().getStackTrace();
+			//遍历获取main方法所在的类并且返回
 			for (StackTraceElement stackTraceElement : stackTrace) {
 				if ("main".equals(stackTraceElement.getMethodName())) {
 					return Class.forName(stackTraceElement.getClassName());
@@ -297,34 +301,44 @@ public class SpringApplication {
 	 * @return a running {@link ApplicationContext}
 	 */
 	public ConfigurableApplicationContext run(String... args) {
-		// 开启关于启动时间的信息监控
+		// 1.开启关于启动时间的信息监控
 		long startTime = System.nanoTime();
 		DefaultBootstrapContext bootstrapContext = createBootstrapContext();
-		// 准备 ApplicationContext
+		// 2.初始化应用上下文和异常报告集合
 		ConfigurableApplicationContext context = null;
-		//java.awt.headless是J2SE的一种模式用于在缺少显示屏、键盘或者鼠标时的系统配置，很多监控工具如jconsole 需要将该值设置为true，系统变量默认为true
+		//3、设置系统属性“java.awt.headless”的值，默认为true，用于运行headless服务器，进行简单的图像处理，多用于在缺少显示屏、键盘或者鼠标时的系统配置，很多监控工具如jconsole 需要将该值设置为true
 		configureHeadlessProperty();
-		// 1. 获取Spring的监听器类，这里是从 spring.factories 中去获取，默认的是以 org.springframework.boot.SpringApplicationRunListener 为key,获取到的监听器类型为 EventPublishingRunListener。
+		//4、创建所有spring运行监听器并发布应用启动事件，简单说的话就是获取SpringApplicationRunListener类型的实例（EventPublishingRunListener对象），并封装进SpringApplicationRunListeners对象，然后返回这个SpringApplicationRunListeners对象。说的再简单点，getRunListeners就是准备好了运行时监听器EventPublishingRunListener。
 		SpringApplicationRunListeners listeners = getRunListeners(args);
-		// 1.1 监听器发送启动事件
+		// 4.1 监听器发送启动事件
 		listeners.starting(bootstrapContext, this.mainApplicationClass);
 		try {
-			// 封装参数
+			//5、初始化默认应用参数类
 			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
-			// 2. 构造容器环境。将容器的一些配置内容加载到 environment  中
+			//6、根据运行监听器和应用参数来准备spring环境
 			ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments);
+			//将要忽略的bean的参数打开
 			configureIgnoreBeanInfo(environment);
+			//7、创建banner打印类
 			Banner printedBanner = printBanner(environment);
+			//8、创建应用上下文，可以理解为创建一个容器
 			context = createApplicationContext();
 			context.setApplicationStartup(this.applicationStartup);
+			//9、准备应用上下文，该步骤包含一个非常关键的操作，将启动类注入容器，为后续开启自动化提供基础
 			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner);
+			//10、刷新应用上下文
 			refreshContext(context);
+			//11、应用上下文刷新后置处理，做一些扩展功能
 			afterRefresh(context, applicationArguments);
+			//12、计时器
 			Duration timeTakenToStartup = Duration.ofNanos(System.nanoTime() - startTime);
+			//13、输出日志记录执行主类名、时间信息
 			if (this.logStartupInfo) {
 				new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), timeTakenToStartup);
 			}
+			//14、发布应用上下文启动监听事件
 			listeners.started(context, timeTakenToStartup);
+			//15、执行所有的Runner运行器
 			callRunners(context, applicationArguments);
 		}
 		catch (Throwable ex) {
@@ -332,6 +346,7 @@ public class SpringApplication {
 			throw new IllegalStateException(ex);
 		}
 		try {
+			//16、发布应用上下文就绪事件
 			Duration timeTakenToReady = Duration.ofNanos(System.nanoTime() - startTime);
 			listeners.ready(context, timeTakenToReady);
 		}
@@ -339,6 +354,7 @@ public class SpringApplication {
 			handleRunFailure(context, ex, null);
 			throw new IllegalStateException(ex);
 		}
+		//17、返回应用上下文
 		return context;
 	}
 
@@ -427,6 +443,7 @@ public class SpringApplication {
 				System.getProperty(SYSTEM_PROPERTY_JAVA_AWT_HEADLESS, Boolean.toString(this.headless)));
 	}
 
+	//创建spring监听器
 	private SpringApplicationRunListeners getRunListeners(String[] args) {
 		Class<?>[] types = new Class<?>[] { SpringApplication.class, String[].class };
 		return new SpringApplicationRunListeners(logger,
@@ -441,8 +458,11 @@ public class SpringApplication {
 	private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes, Object... args) {
 		ClassLoader classLoader = getClassLoader();
 		// Use names and ensure unique to protect against duplicates
+		//获取所有初始化器的名称集合
 		Set<String> names = new LinkedHashSet<>(SpringFactoriesLoader.loadFactoryNames(type, classLoader));
+		//根据名称集合实例化这些初始化器
 		List<T> instances = createSpringFactoriesInstances(type, parameterTypes, classLoader, args, names);
+		//排序
 		AnnotationAwareOrderComparator.sort(instances);
 		return instances;
 	}
